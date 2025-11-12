@@ -1,0 +1,113 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  VIEWER      // Can only view data
+  ANALYST     // Can view and create reports
+  MANAGER     // Can edit and manage data
+  ADMIN       // Full access including user management
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  name          String?
+  role          UserRole  @default(VIEWER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  reports       Report[]
+  meetingNotes  MeetingNote[]
+  
+  @@map("users")
+}
+
+model Company {
+  id            String    @id @default(uuid())
+  name          String
+  description   String?
+  industry      String?
+  website       String?
+  fundingStage  String?
+  location      String?
+  foundedYear   Int?
+  employeeCount Int?
+  tags          String[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  reports       Report[]
+  meetingNotes  MeetingNote[]
+  
+  @@map("companies")
+}
+
+model Report {
+  id            String    @id @default(uuid())
+  title         String
+  content       String    @db.Text
+  summary       String?
+  generatedByAI Boolean   @default(false)
+  status        String    @default("draft")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Foreign keys
+  companyId     String
+  authorId      String
+  
+  // Relations
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  author        User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  
+  @@map("reports")
+}
+
+model MeetingNote {
+  id            String    @id @default(uuid())
+  title         String
+  content       String    @db.Text
+  meetingDate   DateTime?
+  attendees     String[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Foreign keys
+  companyId     String
+  authorId      String
+  
+  // Relations
+  company       Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  author        User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  attachments   Attachment[]
+  
+  @@map("meeting_notes")
+}
+
+model Attachment {
+  id            String       @id @default(uuid())
+  fileName      String
+  fileUrl       String
+  fileSize      Int?
+  mimeType      String?
+  createdAt     DateTime     @default(now())
+  
+  // Foreign keys
+  meetingNoteId String
+  
+  // Relations
+  meetingNote   MeetingNote  @relation(fields: [meetingNoteId], references: [id], onDelete: Cascade)
+  
+  @@map("attachments")
+}

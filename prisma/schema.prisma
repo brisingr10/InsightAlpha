@@ -1,0 +1,212 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// Enums
+enum UserRole {
+  ADMIN
+  EDITOR
+  ANALYST
+  VIEWER
+}
+
+enum ReportStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+// User model for authentication and RBAC
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole @default(VIEWER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  reports            Report[]
+  meetingNotes       CompanyMeetingNote[]
+  apiKeys            ApiKey[]
+  companyTables      CompanyTable[]
+  tableViews         TableView[]
+
+  @@index([email])
+}
+
+// Report model for AI-generated company research
+model Report {
+  id              String       @id @default(cuid())
+  title           String
+  slug            String       @unique
+  contentMarkdown String       @db.Text
+  summary         String?      @db.Text
+  status          ReportStatus @default(DRAFT)
+  reportDate      DateTime?
+  authorId        String
+  categoryId      String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  // Relations
+  author       User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  metadata     ReportMetadata?
+  category     AnalysisCategory? @relation(fields: [categoryId], references: [id])
+
+  @@index([slug])
+  @@index([authorId])
+  @@index([status])
+  @@index([categoryId])
+}
+
+// Report metadata for company details
+model ReportMetadata {
+  id            String   @id @default(cuid())
+  reportId      String   @unique
+  companyName   String
+  ceoName       String?
+  sectors       String[]
+  fundingStage  String?
+  employeeCount Int?
+  revenue       String?
+  foundedYear   Int?
+  location      String?
+  markdownNotes String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([companyName])
+}
+
+// Analysis category for organizing reports
+model AnalysisCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  color       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  reports Report[]
+}
+
+// Company meeting notes
+model CompanyMeetingNote {
+  id          String   @id @default(cuid())
+  companyName String
+  title       String
+  content     String   @db.Text
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  createdBy   User                     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  attachments MeetingNoteAttachment[]
+
+  @@index([companyName])
+  @@index([createdById])
+}
+
+// Meeting note attachments
+model MeetingNoteAttachment {
+  id        String   @id @default(cuid())
+  noteId    String
+  fileName  String
+  fileUrl   String
+  fileSize  Int
+  mimeType  String
+  createdAt DateTime @default(now())
+
+  // Relations
+  note CompanyMeetingNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@index([noteId])
+}
+
+// Company table system (Airtable-like)
+model CompanyTable {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  columns     Json     // Flexible column definitions
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  createdBy User          @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  rows      CompanyRow[]
+  views     TableView[]
+
+  @@index([createdById])
+}
+
+// Company row with flexible JSON data
+model CompanyRow {
+  id        String   @id @default(cuid())
+  tableId   String
+  data      Json     // Flexible row data based on table columns
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  table CompanyTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@index([tableId])
+  @@index([order])
+}
+
+// Table view configurations
+model TableView {
+  id          String   @id @default(cuid())
+  tableId     String
+  userId      String
+  name        String
+  config      Json     // View configuration (filters, sorting, column order)
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  table CompanyTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tableId])
+  @@index([userId])
+}
+
+// API key for external API access
+model ApiKey {
+  id          String   @id @default(cuid())
+  name        String
+  keyHash     String   @unique
+  keyIdentifier String @unique  // First 8 chars for display
+  userId      String
+  rateLimit   Int      @default(100)  // Requests per hour
+  lastUsedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([keyHash])
+}
